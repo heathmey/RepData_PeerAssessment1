@@ -1,0 +1,183 @@
+---
+title: "Reproducible Research Project - Daily Steps Analysis"
+author: "Heather Meylemans"
+date: "6/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+##Setup the dataset and R for the analysis
+ 
+First we want to load the appropriate packages to clean the data and generate the plots
+```{r}
+library(ggplot2)
+library(plyr)
+library(lattice)
+```
+
+Then we want to read the data in from the working directory
+
+```{r}
+activity <- read.csv("activity.csv")
+```
+
+Next we want to do some processing of the dataset to get a consistent table
+```{r}
+activity$day <- weekdays(as.Date(activity$date))
+activity$DateTime<- as.POSIXct(activity$date, format="%Y-%m-%d")
+```
+
+Finally, before we start the analysis, we want to remove null (NA) values from the data set
+
+```{r}
+clean <- activity[!is.na(activity$steps),]
+```
+
+
+## Task #1
+Calculate the number of steps walked each day (mean & median) & create a histogram
+
+First we want to create a table where we sum the values daily:
+```{r}
+sumTable <- aggregate(activity$steps ~ activity$date, FUN=sum, )
+colnames(sumTable)<- c("Date", "Steps")
+```
+
+We can use this table to create a histogram of the data
+```{r}
+hist(sumTable$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day")
+```
+
+We can also use this table to calculate the mean steps per day
+```{r}
+as.integer(mean(sumTable$Steps))
+```
+
+And, to calculate the median steps per day
+```{r}
+as.integer(median(sumTable$Steps))
+```
+
+## Task #2
+Now we want to look at the daily activity pattern for the entire dataset.
+
+We begin by creating a table of averages for 5 minutes intervals throughout the day.
+```{r}
+intervalTable <- ddply(clean, .(interval), summarize, Avg = mean(steps))
+```
+
+Then we can plot this data in a line plot to get an idea of the daily pattern.
+```{r}
+p <- ggplot(intervalTable, aes(x=interval, y=Avg), xlab = "Interval", ylab="Average Number of Steps")
+p + geom_line()+xlab("Interval")+ylab("Average Number of Steps")+ggtitle("Average Steps per Interval")
+```
+
+We can also determine which interval has the maximum number of steps on average.
+```{r}
+maxSteps <- max(intervalTable$Avg)
+intervalTable[intervalTable$Avg==maxSteps,1]
+```
+
+##Task #3 
+This task looks at imputing the missing values with a value of our choice. For this I chose to use the average steps for the day at the missing given interval
+
+First we look at the number of null (NA) values in the original dataset:
+```{r}
+nrow(activity[is.na(activity$steps),])
+```
+
+Next we create a dataset that includes just the NA values from the original data.
+```{r}
+NAdata<- activity[is.na(activity$steps),]
+```
+
+Next we want to determine the average number of steps on a day during an interval
+```{r}
+avgTable <- ddply(clean, .(interval, day), summarize, Avg = mean(steps))
+```
+
+Then we merge the data from above and the NA table we created
+```{r}
+newdata<-merge(NAdata, avgTable, by=c("interval", "day"))
+```
+We need to Reorder the new data in the same format as clean data set
+```{r}
+newdata2<- newdata[,c(6,4,1,2,5)]
+colnames(newdata2)<- c("steps", "date", "interval", "day", "DateTime")
+```
+
+Then, we merge the imputed data into the clean dataset that we were just using in tasks 1 & 2:
+```{r}
+AllData <- rbind(clean, newdata2)
+```
+
+Now we can analyze this new dataset and compare it to the answers in task 1
+
+We start by creating the sum of steps per date to compare with step 1
+```{r}
+sumTable2 <- aggregate(AllData$steps ~ AllData$date, FUN=sum, )
+colnames(sumTable2)<- c("Date", "Steps")
+```
+
+Next we can calculate the mean of the steps in the new data table:
+```{r}
+as.integer(mean(sumTable2$Steps))
+```
+
+Lastly we can create a histogram to look at the difference between the steps in the table without NA values and this new table with the NA values added in.
+```{r}
+hist(sumTable2$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day with NAs Fixed", col="Blue")
+hist(sumTable$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day with NAs Fixed", col="Purple", add=T)
+legend("topright", c("Imputed Data", "Non-NA Data"), fill=c("blue", "purple") )
+```
+
+##Task #4
+Lastly, we want to compare the number of steps taken on the weekend days vs. week days
+
+We need to create new category based on the days of the week
+```{r}
+AllData$DayCategory <- ifelse(AllData$day %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
+```
+
+Next we want to look at the average steps taken on the weekend days versus the weekdays. To do this we need to separate the table into weekdays and weekends.
+```{r}
+intervalTable2 <- ddply(AllData, .(interval, DayCategory), summarize, Avg = mean(steps))
+```
+
+
+Then we want to plot the data in a panel plot with the intervals on the x axis and then number of steps on the y axis. The two panels are for weekends and weekday averages.
+```{r}
+xyplot(Avg~interval|DayCategory, data=intervalTable2, type="l",  layout = c(1,2),
+       main="Average Steps per Interval", 
+       ylab="Average Number of Steps", xlab="Interval")
+```
+
+
+
+
+
+
+
+
+
